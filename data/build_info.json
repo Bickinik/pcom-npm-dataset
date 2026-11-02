@@ -1,0 +1,13 @@
+{
+  "prediction_date": "2026-07-01",
+  "target_window": [
+    "2026-07-01",
+    "2026-09-29"
+  ],
+  "rows": 4094,
+  "packages_with_rows": 134,
+  "packages_requested": 500,
+  "packages_with_advisories": 3715,
+  "errors": 1,
+  "built_at_utc": "2026-11-02T14:36:57Z"
+}
