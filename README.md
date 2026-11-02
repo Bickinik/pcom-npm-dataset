@@ -1,5 +1,7 @@
 # npm vulnerability prediction - training dataset (HW3)
 
+Dataset: the training data is in data/training_data.sqlite (table training_data, 224 columns, one row per stable package version), with the same data as CSV in data/training_data.csv.
+
 Builds the training dataset for predicting the number of new GitHub-reviewed security advisories
 (GHSA) per severity in the 90 days after 1 July 2026, for npm packages. The record schema is
 `schema/training_data.sql` is the `CREATE TABLE` generated from it.
