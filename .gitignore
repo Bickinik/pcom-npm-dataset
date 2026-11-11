@@ -3,3 +3,6 @@ __pycache__/
 *.pyc
 data_smoke/
 schema/PCOM-01_Record_Schema_Public.xlsx
+.venv/
+data_full/*.log
+data_full/errors_*.tsv

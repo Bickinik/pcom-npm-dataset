@@ -66,10 +66,10 @@ def run(
         try:
             doc = fetch_registry(name)
             if not doc:
-                return name, [], "not found in registry"
+                return name, None, [], "not found in registry"
             rows = registry.package_rows(doc, prediction_date, months)
             if not rows:
-                return name, [], None  # no stable release in the window
+                return name, None, [], None  # no stable release in the window
             note = None
             daily = None
             if not skip_downloads:
@@ -78,29 +78,39 @@ def run(
                 except Exception as exc:  # downloads are optional: keep the rows, store NULLs
                     note = f"downloads unavailable: {type(exc).__name__}: {exc}"
             package_level = downloads.monthly_downloads(daily, months)
-            package_level.update(
-                advisories.ghsa_features(
-                    advisories_by_pkg.get(name, []), prediction_date, months
-                )
-            )
             for row in rows:
                 row.update(package_level)
-            return name, rows, note
+            return name, doc["name"], rows, note
         except Exception as exc:  # keep going; the error log lists what to retry
-            return name, [], f"{type(exc).__name__}: {exc}"
+            return name, None, [], f"{type(exc).__name__}: {exc}"
 
-    all_rows: list[dict] = []
+    # Names that differ only in case (the advisory DB has e.g. "Openclaw" and "openclaw") can
+    # resolve to the same registry document. Keep its rows once and merge the advisories.
+    by_doc: dict[str, tuple[list[str], list[dict]]] = {}
     errors: list[str] = []
-    packages_with_rows = 0
+    n_rows = 0
     with ThreadPoolExecutor(max_workers=workers) as pool:
-        for n, (name, rows, error) in enumerate(pool.map(process, names), 1):
+        for n, (name, doc_name, rows, error) in enumerate(pool.map(process, names), 1):
             if error:
                 errors.append(f"{name}\t{error}")
             if rows:
-                packages_with_rows += 1
-                all_rows.extend(rows)
+                if doc_name not in by_doc:
+                    by_doc[doc_name] = ([], rows)
+                    n_rows += len(rows)
+                by_doc[doc_name][0].append(name)
             if n % 100 == 0:
-                log.info("%d/%d packages, %d rows", n, len(names), len(all_rows))
+                log.info("%d/%d packages, %d rows", n, len(names), n_rows)
+
+    all_rows: list[dict] = []
+    for doc_name, (requested, rows) in by_doc.items():
+        if len(requested) > 1:
+            log.info("merged %s into %s (same registry document)", requested, doc_name)
+        merged = {a.ghsa_id: a for r in requested for a in advisories_by_pkg.get(r, [])}
+        ghsa = advisories.ghsa_features(list(merged.values()), prediction_date, months)
+        for row in rows:
+            row.update(ghsa)
+        all_rows.extend(rows)
+    packages_with_rows = len(by_doc)
 
     out_dir.mkdir(parents=True, exist_ok=True)
     names_cols = schema.column_names()

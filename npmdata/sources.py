@@ -6,6 +6,8 @@ from __future__ import annotations
 
 import json
 import logging
+import os
+import threading
 import time
 import urllib.error
 import urllib.request
@@ -51,7 +53,10 @@ def _cached(path: Path, produce):
     value = produce()
     if value is not None:
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps(value), encoding="utf-8")
+        # Write to a temp file first, so a stopped run never leaves a half-written cache file.
+        tmp = path.with_name(path.name + f".{os.getpid()}.{threading.get_ident()}.tmp")
+        tmp.write_text(json.dumps(value), encoding="utf-8")
+        os.replace(tmp, path)
     return value
 
 
