@@ -48,6 +48,21 @@ class FeatureTests(unittest.TestCase):
         self.assertIsNone(f["downloads_1m"])
         self.assertEqual(features.package_targets([r])["high"], 3)
 
+    def test_ghsa_history_survives_per_version_counts(self):
+        # Counted per version: the old version is affected, the latest one is fixed and shows 0.
+        old = record("pkg:npm/a@1.0.0", "2026-01-01T00:00:00.000Z",
+                     ghsa_high_count=5, ghsa_high_count_M1=2, ghsa_low_count_M4=1, ghsa_low_count=1)
+        fixed = record("pkg:npm/a@1.1.0", "2026-05-01T00:00:00.000Z",
+                       ghsa_high_count=1, ghsa_high_count_M0=1)
+        f = features.package_features([old, fixed], PRED)
+        self.assertEqual((f["ghsa_high_total"], f["ghsa_high_3m"], f["ghsa_high_12m"]), (5, 3, 3))
+        self.assertEqual((f["ghsa_low_total"], f["ghsa_low_12m"]), (1, 1))
+        # Counted per package: every record is the same, so the result is that record's values.
+        same = [record(f"pkg:npm/a@1.{i}.0", "2026-01-01T00:00:00.000Z",
+                       ghsa_high_count=5, ghsa_high_count_M1=2) for i in range(3)]
+        self.assertEqual(features.package_features(same, PRED)["ghsa_high_total"],
+                         features.package_features(same[:1], PRED)["ghsa_high_total"])
+
     def test_group_by_package(self):
         groups = features.group_by_package([{"purl": "pkg:npm/%40s/a@1.0.0"},
                                             {"purl": "pkg:npm/%40s/a@1.1.0"},

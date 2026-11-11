@@ -82,10 +82,15 @@ def package_features(records: list[dict], prediction_date: date = PREDICTION_DAT
         f[f"releases_{n}m"] = _sum(releases, n)
         f[f"downloads_{n}m"] = _sum(downloads, n)
 
+    # GHSA history: the highest value over all version records. When the counts are per package
+    # every record has the same value, so this changes nothing. When they are per version (only
+    # advisories affecting that version), the latest version often shows 0 because its
+    # advisories are fixed, and the maximum recovers the package's history.
     f["ghsa_total"] = f["ghsa_12m"] = f["ghsa_3m"] = 0.0
     for sev in SEVERITIES + ["unknown"]:
-        total = _num(latest.get(f"ghsa_{sev}_count")) or 0.0
-        monthly = [v or 0.0 for v in _series(latest, f"ghsa_{sev}_count")]
+        total = max(_num(r.get(f"ghsa_{sev}_count")) or 0.0 for r in records)
+        monthly = [max(v or 0.0 for v in month)
+                   for month in zip(*(_series(r, f"ghsa_{sev}_count") for r in records))]
         f[f"ghsa_{sev}_total"] = total
         f[f"ghsa_{sev}_12m"] = sum(monthly)
         f[f"ghsa_{sev}_6m"] = sum(monthly[:6])
