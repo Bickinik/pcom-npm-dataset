@@ -16,7 +16,7 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
-from . import advisories, downloads, registry, schema, sources
+from . import advisories, downloads, github, registry, schema, sources
 from .timeutil import month_ranges
 
 log = logging.getLogger("build")
@@ -43,6 +43,7 @@ def run(
     n_extra: int | None = None,
     seed: int = 42,
     skip_downloads: bool = False,
+    github_lookup=None,
 ) -> dict:
     months = month_ranges(prediction_date)
     first_day, last_day = months[-1][0], sources.last_day_before(prediction_date)
@@ -78,6 +79,10 @@ def run(
                 except Exception as exc:  # downloads are optional: keep the rows, store NULLs
                     note = f"downloads unavailable: {type(exc).__name__}: {exc}"
             package_level = downloads.monthly_downloads(daily, months)
+            if github_lookup:  # issue / PR columns from the cache filled by fetch_github
+                repo = github.repo_from_doc(doc)
+                package_level.update(
+                    github.monthly_github(github_lookup(repo) if repo else None, months))
             for row in rows:
                 row.update(package_level)
             return name, doc["name"], rows, note
@@ -169,6 +174,11 @@ def main() -> None:
     parser.add_argument("--seed", default=42, type=int, help="seed for the random subsets")
     parser.add_argument("--skip-downloads", action="store_true",
                         help="do not query the downloads API (download columns stay NULL)")
+    parser.add_argument("--github", action="store_true",
+                        help="fill the issue / PR columns from cache/github "
+                             "(run npmdata.fetch_github first; no network access here)")
+    parser.add_argument("--github-since", default=date(2025, 4, 1), type=date.fromisoformat,
+                        help="the --since that was used for npmdata.fetch_github")
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
@@ -186,6 +196,7 @@ def main() -> None:
         args.n_extra,
         args.seed,
         args.skip_downloads,
+        sources.github_cached(args.cache, args.github_since) if args.github else None,
     )
     print(json.dumps(info, indent=2))
 
