@@ -9,8 +9,9 @@ one record per package in the input, so one record for the usual one-package fil
 for low, moderate, high and critical are floats; unknown is always 0 (not modelled).
 --package-column adds the package name as the first column.
 
-Two models: packages whose GitHub issue / PR columns are filled are predicted by
---github-model, which uses them; all others by --model, which was fitted without them.
+--model predicts every package; it uses the GitHub issue / PR columns where they are filled.
+Optional: with --github-model, that model predicts the packages whose GitHub columns are
+filled and --model the others (for a --model that was fitted without those columns).
 """
 from __future__ import annotations
 
