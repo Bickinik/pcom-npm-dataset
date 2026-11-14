@@ -116,7 +116,6 @@
 @elwood/typescript-config	not found in registry
 @emquad/typst-binding-linux-arm64-musl	not found in registry
 @epoint-mrc/mc-cli	not found in registry
-@espace-client-axafr/icc-mon-auto	OSError: [Errno 22] Invalid argument: 'cache\\registry\\%40espace-client-axafr%2Ficc-mon-auto.json'
 @faable/swr-pagination-adapter	not found in registry
 @favorodera/nuxt-app-utils	not found in registry
 @fb24m/create-template	not found in registry
@@ -480,5 +479,4 @@ Rambox	not found in registry
 cedipay-core	not found in registry
 novu/api	HTTPError: HTTP Error 405: Method Not Allowed
 org.webjars.npm:json-pointer	not found in registry
-ringcentral-google-drive-notification-add-in	OSError: [Errno 22] Invalid argument: 'cache\\registry\\ringcentral-google-drive-notification-add-in.json'
 vue-storefront-api	not found in registry

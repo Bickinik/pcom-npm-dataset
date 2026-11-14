@@ -4,10 +4,10 @@
     "2026-07-01",
     "2026-09-29"
   ],
-  "rows": 115470,
-  "packages_with_rows": 7082,
+  "rows": 115472,
+  "packages_with_rows": 7084,
   "packages_requested": 33698,
   "packages_with_advisories": 3723,
-  "errors": 484,
-  "built_at_utc": "2026-11-11T13:47:59Z"
+  "errors": 482,
+  "built_at_utc": "2026-11-14T21:22:26Z"
 }
