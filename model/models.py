@@ -13,7 +13,7 @@ import json
 import math
 from pathlib import Path
 
-from .features import SEVERITIES
+from .features import GITHUB_PREFIX, SEVERITIES
 
 HORIZON = 90 / 365
 
@@ -104,11 +104,15 @@ def _matrix(model_features: list[str], feature_dicts: list[dict], period: list[f
 
 
 def fit_lightgbm(packages: list[dict], weights: list[float],
-                 other_period: list[float] | None = None) -> dict:
-    """One Poisson model per severity. other_period: see fit_poisson (0 when predicting)."""
+                 other_period: list[float] | None = None, github: bool = True) -> dict:
+    """One Poisson model per severity. other_period: see fit_poisson (0 when predicting).
+
+    github=False leaves out the issue / PR features (the model for records without them).
+    """
     import lightgbm as lgb
 
-    names = sorted(k for k in packages[0]["features"] if k not in LIGHTGBM_EXCLUDE)
+    names = sorted(k for k in packages[0]["features"] if k not in LIGHTGBM_EXCLUDE
+                   and (github or not k.startswith(GITHUB_PREFIX)))
     period = other_period if other_period is not None else [0.0] * len(packages)
     x = _matrix(names, [p["features"] for p in packages], period)
     model = {"kind": "lightgbm", "features": names, "boosters": {}}

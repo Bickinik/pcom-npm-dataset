@@ -2,7 +2,7 @@ import unittest
 from datetime import date
 
 from model import features, models
-from model.backtest import metrics
+from model.backtest import mean_distance, metrics
 from model.data import borrow_downloads
 
 PRED = date(2026, 7, 1)
@@ -63,6 +63,25 @@ class FeatureTests(unittest.TestCase):
         self.assertEqual(features.package_features(same, PRED)["ghsa_high_total"],
                          features.package_features(same[:1], PRED)["ghsa_high_total"])
 
+    def test_github_features(self):
+        empty = features.package_features([record("pkg:npm/a@1.0.0", "2026-01-01T00:00:00.000Z")], PRED)
+        self.assertIsNone(empty["gh_issues_opened_12m"])
+        self.assertIsNone(empty["gh_issue_close_ratio"])
+        filled = {f"{s}_M{i}": 0 for i in range(12) for s in (
+            "issues_opened", "issues_closed", "pull_requests_opened", "pull_requests_merged",
+            "pull_requests_closed_unmerged", "issues_open_at_month_end",
+            "pull_requests_open_at_month_end")}
+        filled.update(issues_opened_M0=3, issues_opened_M5="1", issues_closed_M1=2,
+                      issues_open_at_month_end_M0=7, issues_open_at_month_end_M1=9,
+                      pull_requests_merged_M11=4)
+        f = features.package_features(
+            [record("pkg:npm/a@1.0.0", "2026-01-01T00:00:00.000Z", **filled)], PRED)
+        self.assertEqual((f["gh_issues_opened_3m"], f["gh_issues_opened_12m"]), (3, 4))
+        self.assertEqual((f["gh_issues_open"], f["gh_prs_open"], f["gh_prs_merged_12m"]), (7, 0, 4))
+        self.assertEqual(f["gh_issue_close_ratio"], 0.5)
+        self.assertTrue(all(k.startswith(features.GITHUB_PREFIX)
+                            for k in features.github_features({})))
+
     def test_group_by_package(self):
         groups = features.group_by_package([{"purl": "pkg:npm/%40s/a@1.0.0"},
                                             {"purl": "pkg:npm/%40s/a@1.1.0"},
@@ -100,11 +119,36 @@ class ModelTests(unittest.TestCase):
         self.assertAlmostEqual(pred["high"], 0.1353352832, places=6)
         self.assertEqual(len(models.feature_vector(f, "high")), n)
 
+    def test_github_model_only_for_records_with_github_columns(self):
+        from model.predict import predict_packages
+
+        def constant(intercept):
+            n = len(models.FEATURE_NAMES)
+            return {"kind": "poisson", "features": models.FEATURE_NAMES,
+                    "coef": {sev: [intercept] + [0.0] * n for sev in features.SEVERITIES}}
+
+        groups = {
+            "plain": [record("pkg:npm/plain@1.0.0", "2026-01-01T00:00:00.000Z",
+                             issues_opened_M0="")],
+            "withgh": [record("pkg:npm/withgh@1.0.0", "2026-01-01T00:00:00.000Z",
+                              issues_opened_M0="0")],  # a filled 0 counts as filled
+        }
+        both = predict_packages(constant(-2.0), groups, PRED, github_model=constant(0.0))
+        self.assertAlmostEqual(both["plain"]["high"], 0.1353352832, places=6)
+        self.assertAlmostEqual(both["withgh"]["high"], 1.0)
+        single = predict_packages(constant(-2.0), groups, PRED)
+        self.assertAlmostEqual(single["withgh"]["high"], 0.1353352832, places=6)
+
     def test_metrics(self):
         mae, rmse, dev = metrics([(1.0, 1.0), (0.0, 2.0)])
         self.assertAlmostEqual(mae, 1.0)
         self.assertAlmostEqual(rmse, 2 ** 0.5)
         self.assertGreater(dev, 0)
+
+    def test_mean_distance(self):
+        zero = {s: 0.0 for s in features.SEVERITIES}
+        truth = dict(zero, moderate=3.0, high=4.0)
+        self.assertAlmostEqual(mean_distance([zero, truth], [truth, truth]), 2.5)  # (5 + 0) / 2
 
 
 if __name__ == "__main__":

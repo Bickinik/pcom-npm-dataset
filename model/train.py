@@ -31,6 +31,8 @@ def main() -> None:
     parser.add_argument("--kind", choices=["lightgbm", "poisson"], default="lightgbm")
     parser.add_argument("--exclude-records", type=Path,
                         help="records file to predict; its packages are left out of training")
+    parser.add_argument("--no-github", action="store_true",
+                        help="leave out the issue / PR features (model for records without them)")
     parser.add_argument("--out", type=Path, required=True)
     args = parser.parse_args()
 
@@ -51,9 +53,12 @@ def main() -> None:
         packages += kept
         period += [1.0 if shift else 0.0] * len(kept)
         print(f"{snap_date}: {len(kept)} packages ({len(loaded) - len(kept)} left out)")
-    fit = fit_lightgbm if args.kind == "lightgbm" else fit_poisson
-    model = fit(packages, weights_for(packages, args.future_weight),
-                other_period=period if any(period) else None)
+    weights = weights_for(packages, args.future_weight)
+    other = period if any(period) else None
+    if args.kind == "lightgbm":
+        model = fit_lightgbm(packages, weights, other, github=not args.no_github)
+    else:
+        model = fit_poisson(packages, weights, other_period=other)
     model["trained_on"] = [d.isoformat() for d, _ in snapshots]
     model["future_weight"] = args.future_weight
     save_model(model, args.out)

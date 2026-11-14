@@ -99,6 +99,30 @@ def package_features(records: list[dict], prediction_date: date = PREDICTION_DAT
         f["ghsa_total"] += total
         f["ghsa_12m"] += sum(monthly)
         f["ghsa_3m"] += sum(monthly[:3])
+    f.update(github_features(latest))
+    return f
+
+
+GITHUB_PREFIX = "gh_"  # all features from the optional issue / PR columns start with this
+
+
+def github_features(record: dict) -> dict:
+    """Issue and pull request activity of the package's repository; None where not filled."""
+    series = {name: _series(record, name) for name in (
+        "issues_opened", "issues_closed", "pull_requests_opened", "pull_requests_merged",
+        "pull_requests_closed_unmerged", "issues_open_at_month_end",
+        "pull_requests_open_at_month_end")}
+    f = {}
+    for short, name in (("issues_opened", "issues_opened"), ("prs_opened", "pull_requests_opened")):
+        f[f"gh_{short}_3m"] = _sum(series[name], 3)
+        f[f"gh_{short}_12m"] = _sum(series[name], 12)
+    f["gh_issues_closed_12m"] = _sum(series["issues_closed"], 12)
+    f["gh_prs_merged_12m"] = _sum(series["pull_requests_merged"], 12)
+    f["gh_prs_unmerged_12m"] = _sum(series["pull_requests_closed_unmerged"], 12)
+    f["gh_issues_open"] = series["issues_open_at_month_end"][0]
+    f["gh_prs_open"] = series["pull_requests_open_at_month_end"][0]
+    opened, closed = f["gh_issues_opened_12m"], f["gh_issues_closed_12m"]
+    f["gh_issue_close_ratio"] = closed / opened if opened and closed is not None else None
     return f
 
 

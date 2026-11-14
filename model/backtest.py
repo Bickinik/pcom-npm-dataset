@@ -26,7 +26,7 @@ from datetime import date
 from pathlib import Path
 
 from .data import load_packages, read_names
-from .features import SEVERITIES
+from .features import GITHUB_PREFIX, SEVERITIES
 from .models import (fit_lightgbm, fit_poisson, predict_lightgbm, predict_naive,
                      predict_poisson, predict_zero)
 
@@ -43,6 +43,13 @@ def metrics(pairs: list[tuple[float, float]]) -> tuple[float, float, float]:
     return mae, rmse, dev / n
 
 
+def mean_distance(predictions: list[dict], targets: list[dict]) -> float:
+    """Mean Euclidean distance per package over the severities."""
+    total = sum(math.sqrt(sum((p[s] - y[s]) ** 2 for s in SEVERITIES))
+                for p, y in zip(predictions, targets))
+    return total / len(predictions)
+
+
 def weights_for(packages: list[dict], future_weight: float) -> list[float]:
     return [future_weight if p["origin"] == "future" else 1.0 for p in packages]
 
@@ -57,8 +64,11 @@ def fit_and_predict(train: list[dict], other_period, test: list[dict], future_we
     poisson = fit_poisson(train, weights, other_period=period)
     out = {"poisson": [predict_poisson(poisson, p["features"]) for p in test]}
     if lightgbm:
-        out["lightgbm"] = predict_lightgbm(fit_lightgbm(train, weights, period),
-                                           [p["features"] for p in test])
+        rows = [p["features"] for p in test]
+        out["lightgbm"] = predict_lightgbm(fit_lightgbm(train, weights, period, github=False), rows)
+        if any(v is not None for p in train for k, v in p["features"].items()
+               if k.startswith(GITHUB_PREFIX)):  # the data has issue / PR columns
+            out["lightgbm gh"] = predict_lightgbm(fit_lightgbm(train, weights, period), rows)
     return out
 
 
@@ -68,20 +78,22 @@ def report(test: list[dict], predictions: dict[str, list[dict]]) -> None:
         "history + blind (blind test mix)": lambda p: p["origin"] != "future",
         "history only": lambda p: p["origin"] == "history",
         "no history as collected": lambda p: p["origin"] != "history",
+        "advisory in the target window": lambda p: sum(p["targets"].values()) > 0,
     }
     for label, keep in subsets.items():
         idx = [i for i, p in enumerate(test) if keep(p)]
         print(f"\n{label} ({len(idx)} packages)")
-        print(f"  {'model':13s} {'MAE':>7s} {'RMSE':>7s} {'deviance':>9s}   "
+        print(f"  {'model':13s} {'MAE':>7s} {'RMSE':>7s} {'deviance':>9s} {'distance':>9s}   "
               f"predicted / actual advisories per severity")
         for name, preds in predictions.items():
             pairs = [(preds[i][s], test[i]["targets"][s]) for i in idx for s in SEVERITIES]
             mae, rmse, dev = metrics(pairs)
+            dist = mean_distance([preds[i] for i in idx], [test[i]["targets"] for i in idx])
             totals = "  ".join(
                 f"{s[:4]} {sum(preds[i][s] for i in idx):.0f}/"
                 f"{sum(test[i]['targets'][s] for i in idx):.0f}" for s in SEVERITIES
             )
-            print(f"  {name:13s} {mae:7.4f} {rmse:7.4f} {dev:9.4f}   {totals}")
+            print(f"  {name:13s} {mae:7.4f} {rmse:7.4f} {dev:9.4f} {dist:9.4f}   {totals}")
 
 
 def main() -> None:
