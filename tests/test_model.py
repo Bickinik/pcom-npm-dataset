@@ -88,6 +88,23 @@ class FeatureTests(unittest.TestCase):
                                             {"purl": "pkg:npm/b@1.0.0"}])
         self.assertEqual({k: len(v) for k, v in groups.items()}, {"@s/a": 2, "b": 1})
 
+    def test_records_without_purl(self):
+        records = [
+            record("", "2026-01-01T00:00:00.000Z", dependency_count=5),
+            record("", "2026-06-01T00:00:00.000Z", dependency_count=9),
+            record("", "2026-03-01T00:00:00.000Z", dependency_count=7),
+        ]
+        for r in records[1:]:
+            del r["purl"]  # a missing column and an empty cell are treated alike
+        groups = features.group_by_package(records)
+        self.assertEqual([len(v) for v in groups.values()], [3])
+        other = record("", "2026-02-01T00:00:00.000Z", package_created_at="2021-01-01T00:00:00.000Z")
+        self.assertEqual(len(features.group_by_package(records + [other])), 2)
+        f = features.package_features(records, PRED)
+        self.assertEqual(f["dependency_count"], 9)  # the newest release is the latest version
+        self.assertIsNone(f["latest_major"])
+        self.assertEqual((f["versions_in_window"], f["days_since_last_release"]), (3, 30))
+
     def test_borrow_downloads_shifts_months(self):
         donor = record("pkg:npm/a@1.0.0", "2026-01-01T00:00:00.000Z",
                        **{f"package_downloads_M{i}": 100 + i for i in range(12)})

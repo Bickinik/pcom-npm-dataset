@@ -28,6 +28,9 @@ def main() -> None:
                         metavar=("SQLITE", "DATE"))
     parser.add_argument("--blind-names", type=Path, default=Path("extra_packages_random.txt"))
     parser.add_argument("--future-weight", type=float, default=1.0)
+    parser.add_argument("--advisory-weight", type=float, default=1.0,
+                        help="weight of packages with an advisory in the target window "
+                             "(the others count 1)")
     parser.add_argument("--kind", choices=["lightgbm", "poisson"], default="lightgbm")
     parser.add_argument("--exclude-records", type=Path,
                         help="records file to predict; its packages are left out of training")
@@ -53,7 +56,8 @@ def main() -> None:
         packages += kept
         period += [1.0 if shift else 0.0] * len(kept)
         print(f"{snap_date}: {len(kept)} packages ({len(loaded) - len(kept)} left out)")
-    weights = weights_for(packages, args.future_weight)
+    weights = [w * (args.advisory_weight if sum(p["targets"].values()) > 0 else 1.0)
+               for w, p in zip(weights_for(packages, args.future_weight), packages)]
     other = period if any(period) else None
     if args.kind == "lightgbm":
         model = fit_lightgbm(packages, weights, other, github=not args.no_github)
@@ -61,6 +65,7 @@ def main() -> None:
         model = fit_poisson(packages, weights, other_period=other)
     model["trained_on"] = [d.isoformat() for d, _ in snapshots]
     model["future_weight"] = args.future_weight
+    model["advisory_weight"] = args.advisory_weight
     save_model(model, args.out)
     print(f"wrote {args.out}")
 

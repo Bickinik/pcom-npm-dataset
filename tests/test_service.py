@@ -12,14 +12,15 @@ except ImportError:  # the service needs requirements-service.txt
 from model.features import SEVERITIES
 
 
-def records_csv(packages=("a",), versions=("1.0.0", "1.1.0")) -> str:
+def records_csv(packages=("a",), versions=("1.0.0", "1.1.0"), purl=True) -> str:
     rows = []
     for name in packages:
         for version in versions:
-            row = {"purl": f"pkg:npm/{name}@{version}",
+            row = {"purl": f"pkg:npm/{name}@{version}"} if purl else {}
+            row.update({
                    "package_created_at": "2020-01-01T00:00:00.000Z",
                    "published_at": "2026-01-01T00:00:00.000Z", "dependency_count": "1",
-                   "package_downloads_M0": ""}  # empty cell, as in a CSV with NULLs
+                   "package_downloads_M0": ""})  # empty cell, as in a CSV with NULLs
             for sev in SEVERITIES + ["unknown"]:
                 row[f"ghsa_{sev}_count"] = "2"
                 for i in range(12):
@@ -73,6 +74,11 @@ class ServiceTests(unittest.TestCase):
         values = self.check_shape(self.run_round(lambda url, timeout: FakeResponse(data)))
         self.assertGreater(sum(values[:4]), 0)
         self.assertEqual(values[4], 0)  # unknown
+
+    def test_round_without_purl_column(self):
+        data = records_csv(purl=False).encode("utf-8")
+        values = self.check_shape(self.run_round(lambda url, timeout: FakeResponse(data)))
+        self.assertGreater(sum(values[:4]), 0)
 
     def test_several_packages_still_give_one_record(self):
         data = records_csv(packages=("a", "b")).encode("utf-8")

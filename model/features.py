@@ -34,10 +34,23 @@ def split_purl(purl: str) -> tuple[str, str]:
     return unquote(path), unquote(version)
 
 
+def purl_parts(record: dict) -> tuple[str, tuple[int, int, int]] | None:
+    """(package name, semver key) of a record; None when it has no usable purl."""
+    try:
+        name, version = split_purl((record.get("purl") or "").strip())
+        return (name, semver_key(version)) if name else None
+    except ValueError:
+        return None
+
+
 def group_by_package(records) -> dict[str, list[dict]]:
+    """Records per package name. Records without a usable purl are grouped by the package's
+    creation timestamp, which is the same on every version record of a package."""
     groups: dict[str, list[dict]] = defaultdict(list)
     for record in records:
-        groups[split_purl(record["purl"])[0]].append(record)
+        parts = purl_parts(record)
+        name = parts[0] if parts else f"(no purl, created {record.get('package_created_at') or '?'})"
+        groups[name].append(record)
     return dict(groups)
 
 
@@ -62,14 +75,20 @@ def package_features(records: list[dict], prediction_date: date = PREDICTION_DAT
     """Features of one package. M0 is the month just before prediction_date."""
     if not records:
         raise ValueError("no records")
-    versions = [(semver_key(split_purl(r["purl"])[1]), r) for r in records]
-    latest = max(versions, key=lambda v: v[0])[1]  # highest semver, not newest timestamp
     pred = to_dt(prediction_date)
     published = [parse_ts(r["published_at"]) for r in records]
+    parts = [purl_parts(r) for r in records]
+    if all(parts):  # highest semver, not newest timestamp
+        versions = [p[1] for p in parts]
+        latest = records[versions.index(max(versions))]
+        latest_major = max(versions)[0]
+    else:  # version numbers unknown: the newest release stands in for the latest version
+        latest = records[published.index(max(published))]
+        latest_major = None
 
     f: dict = {
         "versions_in_window": len(records),
-        "latest_major": max(v[0] for v in versions)[0],
+        "latest_major": latest_major,
         "package_age_days": (pred - parse_ts(latest["package_created_at"])).days,
         "days_since_last_release": (pred - max(published)).days,
     }

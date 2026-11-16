@@ -3,7 +3,9 @@
     python -m model.predict records.csv --model model/round1_model.json --out predictions.csv
 
 Input: a CSV (or .sqlite with a training_data table) in the official record schema, one row
-per stable version. Target columns are ignored if present.
+per stable version. Target columns are ignored if present. The purl column may be missing:
+the records are then grouped by package_created_at, the newest release counts as the latest
+version, and the major version is a missing value.
 Output: a CSV with the target columns of the record schema (target_ghsa_<severity>_count_90d),
 one record per package in the input, so one record for the usual one-package file. The counts
 for low, moderate, high and critical are floats; unknown is always 0 (not modelled).
